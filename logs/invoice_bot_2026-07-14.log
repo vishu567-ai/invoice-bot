@@ -1,0 +1,12 @@
+2026-07-14 16:02:03,933 | INFO | Invoice Bot started successfully
+2026-07-14 16:02:29,823 | INFO | Invoice Bot started successfully
+2026-07-14 16:02:29,837 | INFO | Connecting to Gmail...
+2026-07-14 16:02:29,847 | INFO | file_cache is only supported with oauth2client<4.0.0
+2026-07-14 16:02:31,271 | INFO | Found 1 invoice(s) in Gmail
+2026-07-14 16:02:31,274 | INFO | Starting processing: professional_sample_invoice_2.pdf
+2026-07-14 16:02:31,336 | INFO | Text extracted successfully from: professional_sample_invoice_2.pdf
+2026-07-14 16:03:27,192 | INFO | HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2026-07-14 16:03:27,194 | INFO | AI extracted data: vendor=TechNova Solutions Pvt. Ltd., invoice_no=TN-2026-014, total=90860
+2026-07-14 16:03:27,201 | INFO | Invoice validated successfully: TN-2026-014
+2026-07-14 16:03:27,207 | WARNING | Duplicate invoice detected: TN-2026-014
+2026-07-14 16:03:30,461 | INFO | Invoice saved to Excel: TN-2026-014

@@ -5,58 +5,241 @@ from llm_extractor import extract_invoice_data
 from validator import validate_invoice
 from database import init_db, save_invoice, get_all_invoices
 from rpa_entry import save_to_excel
+from email_fetcher import fetch_invoice_emails
+from logger import log_info, log_error, log_warning, get_logs
 import os
+import pandas as pd
 
+# Page config
+st.set_page_config(
+    page_title="AI Invoice Bot",
+    page_icon="🤖",
+    layout="wide"
+)
+
+# Custom CSS
+st.markdown("""
+    <style>
+    .main { background-color: #0f1117; }
+    .title {
+        text-align: center;
+        font-size: 40px;
+        font-weight: bold;
+        color: #00d4ff;
+        padding: 20px 0px 5px 0px;
+    }
+    .subtitle {
+        text-align: center;
+        font-size: 16px;
+        color: #888888;
+        margin-bottom: 10px;
+    }
+    .stButton>button {
+        background-color: #00d4ff;
+        color: black;
+        font-weight: bold;
+        border-radius: 10px;
+        padding: 10px 30px;
+        border: none;
+        width: 100%;
+    }
+    .stButton>button:hover {
+        background-color: #00a8cc;
+        color: white;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Initialize database
 init_db()
+log_info("Invoice Bot started successfully")
 
-st.title("AI-Powered Invoice Processing Bot")
-st.subheader("LLM + RPA | Local Prototype")
+# Header
+st.markdown('<div class="title">🤖 AI-Powered Invoice Processing Bot</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">LLM + RPA | Local Prototype | 100% Free & Offline</div>', unsafe_allow_html=True)
+st.divider()
 
-uploaded_file = st.file_uploader("Upload Invoice (PDF or Image)", type=["pdf", "png", "jpg", "jpeg"])
+# Confidence helper
+def confidence_label(score):
+    if score >= 80:
+        return f"🟢 {score}% confident"
+    elif score >= 50:
+        return f"🟡 {score}% confident"
+    else:
+        return f"🔴 {score}% confident"
 
-if uploaded_file is not None:
-    file_path = os.path.join("invoices", uploaded_file.name)
-    os.makedirs("invoices", exist_ok=True)
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+def process_single_invoice(file_path, file_type):
+    try:
+        log_info(f"Starting processing: {os.path.basename(file_path)}")
 
-    st.success(f"File uploaded: {uploaded_file.name}")
-
-    if st.button("Process Invoice"):
-        with st.spinner("Reading invoice..."):
-            if uploaded_file.type == "application/pdf":
+        with st.spinner("🔍 Reading invoice..."):
+            if file_type == "application/pdf" or file_path.endswith('.pdf'):
                 text = extract_text_from_pdf(file_path)
             else:
                 text = extract_text_from_image(file_path)
+        log_info(f"Text extracted successfully from: {os.path.basename(file_path)}")
 
-        st.subheader("Extracted Text")
-        st.text_area("Raw Text", text, height=150)
+        with st.expander("📄 View Raw Extracted Text"):
+            st.text_area("", text, height=120)
 
-        with st.spinner("AI is extracting data..."):
+        with st.spinner("🧠 AI extracting data..."):
             data = extract_invoice_data(text)
+        log_info(f"AI extracted data: vendor={data.get('vendor')}, invoice_no={data.get('invoice_number')}, total={data.get('total')}")
 
-        st.subheader("AI Extracted Data")
-        st.json(data)
+        st.markdown("### 🧠 AI Extracted Data")
+        fields = [
+            ("🏢 Vendor", "vendor", "vendor_confidence"),
+            ("🔢 Invoice No.", "invoice_number", "invoice_number_confidence"),
+            ("📅 Date", "date", "date_confidence"),
+            ("💰 Total", "total", "total_confidence"),
+            ("🧾 Tax", "tax", "tax_confidence"),
+        ]
+
+        for label, field, conf_field in fields:
+            value = data.get(field, 'N/A')
+            confidence = data.get(conf_field, 0)
+            col_a, col_b = st.columns([2, 1])
+            with col_a:
+                st.metric(label, value)
+            with col_b:
+                st.markdown(f"<br>{confidence_label(confidence)}", unsafe_allow_html=True)
 
         is_valid, messages = validate_invoice(data)
 
         if is_valid:
-            st.success("Invoice is Valid!")
+            st.success("✅ Invoice is Valid!")
+            log_info(f"Invoice validated successfully: {data.get('invoice_number')}")
+
             saved = save_invoice(data)
             if saved:
-                st.success("Saved to Database!")
+                st.success("💾 Saved to Database!")
+                log_info(f"Invoice saved to database: {data.get('invoice_number')}")
             else:
-                st.warning("Duplicate Invoice - Already exists in database!")
+                st.warning("⚠️ Duplicate Invoice!")
+                log_warning(f"Duplicate invoice detected: {data.get('invoice_number')}")
+
             save_to_excel(data)
-            st.success("Data saved to Excel!")
+            st.success("📊 Saved to Excel!")
+            log_info(f"Invoice saved to Excel: {data.get('invoice_number')}")
+
         else:
-            st.error("Invoice Validation Failed!")
+            st.error("❌ Validation Failed!")
             for msg in messages:
                 st.warning(msg)
+                log_warning(f"Validation failed for {os.path.basename(file_path)}: {msg}")
 
-st.subheader("All Processed Invoices")
+    except Exception as e:
+        st.error(f"❌ Error processing invoice: {str(e)}")
+        log_error(f"Error processing {os.path.basename(file_path)}: {str(e)}")
+
+# Sidebar
+with st.sidebar:
+    st.title("📋 Invoice Bot")
+    st.markdown("---")
+    st.markdown("### ⚙️ How it works")
+    st.markdown("1. 📤 Upload Invoice")
+    st.markdown("2. 🔍 OCR reads the text")
+    st.markdown("3. 🧠 AI extracts data")
+    st.markdown("4. ✅ System validates")
+    st.markdown("5. 💾 Saves to Database")
+    st.markdown("6. 📊 Updates Excel")
+    st.markdown("---")
+    st.markdown("### 🛠️ Tech Stack")
+    st.markdown("🧠 Mistral LLM (Ollama)")
+    st.markdown("👁️ Tesseract OCR")
+    st.markdown("🗄️ SQLite Database")
+    st.markdown("📊 Excel (openpyxl)")
+    st.markdown("🌐 Streamlit UI")
+    st.markdown("📧 Gmail API")
+    st.markdown("---")
+    invoices = get_all_invoices()
+    total_invoices = len(invoices)
+    total_amount = sum([inv[4] for inv in invoices]) if invoices else 0
+    st.markdown("### 📈 Stats")
+    st.metric("Total Processed", total_invoices)
+    st.metric("Total Amount", f"${total_amount:.2f}")
+
+# Tabs
+tab1, tab2, tab3 = st.tabs(["📤 Manual Upload", "📧 Fetch from Gmail", "📋 Logs"])
+
+with tab1:
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.markdown("### 📤 Upload Invoice")
+        uploaded_file = st.file_uploader(
+            "Drag and drop or click to upload",
+            type=["pdf", "png", "jpg", "jpeg"],
+            help="Supported: PDF, PNG, JPG, JPEG"
+        )
+
+        if uploaded_file is not None:
+            st.success(f"✅ File uploaded: {uploaded_file.name}")
+            file_path = os.path.join("invoices", uploaded_file.name)
+            os.makedirs("invoices", exist_ok=True)
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            log_info(f"File uploaded: {uploaded_file.name}")
+
+            if st.button("🚀 Process Invoice"):
+                with col2:
+                    process_single_invoice(file_path, uploaded_file.type)
+
+with tab2:
+    st.markdown("### 📧 Fetch Invoices from Gmail")
+    st.info("This will search your Gmail for emails with 'invoice' in subject and download attachments automatically.")
+
+    if st.button("📧 Fetch Invoice Emails"):
+        with st.spinner("Connecting to Gmail..."):
+            try:
+                log_info("Connecting to Gmail...")
+                files = fetch_invoice_emails()
+                if files:
+                    st.success(f"✅ Found {len(files)} invoice attachment(s)!")
+                    log_info(f"Found {len(files)} invoice(s) in Gmail")
+                    for file_path in files:
+                        st.markdown(f"**Processing:** {os.path.basename(file_path)}")
+                        process_single_invoice(file_path, "")
+                else:
+                    st.warning("No invoice emails found with attachments.")
+                    log_warning("No invoice emails found in Gmail")
+            except Exception as e:
+                st.error(f"Error connecting to Gmail: {str(e)}")
+                log_error(f"Gmail connection error: {str(e)}")
+
+with tab3:
+    st.markdown("### 📋 System Logs")
+    st.info("Real-time log of all bot actions")
+
+    if st.button("🔄 Refresh Logs"):
+        pass
+
+    logs = get_logs()
+    if logs:
+        log_text = "".join(logs)
+        st.text_area("", log_text, height=400)
+
+        # Color coded summary
+        info_count = sum(1 for l in logs if "INFO" in l)
+        warning_count = sum(1 for l in logs if "WARNING" in l)
+        error_count = sum(1 for l in logs if "ERROR" in l)
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("✅ Info Logs", info_count)
+        with c2:
+            st.metric("⚠️ Warnings", warning_count)
+        with c3:
+            st.metric("❌ Errors", error_count)
+    else:
+        st.info("No logs yet.")
+
+st.divider()
+
+# All invoices table
+st.markdown("### 📋 All Processed Invoices")
 invoices = get_all_invoices()
 if invoices:
-    st.table(invoices)
+    df = pd.DataFrame(invoices, columns=["ID", "Vendor", "Invoice No.", "Date", "Total", "Tax", "Status"])
+    st.dataframe(df, use_container_width=True)
 else:
-    st.info("No invoices processed yet.")
+    st.info("No invoices processed yet. Upload an invoice to get started!")
