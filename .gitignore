@@ -1,0 +1,8 @@
+credentials.json
+token.json
+logs/
+__pycache__/
+*.pyc
+invoice_data.db
+invoice_records.xlsx
+invoices/
