@@ -10,3 +10,27 @@
 2026-07-14 16:03:27,201 | INFO | Invoice validated successfully: TN-2026-014
 2026-07-14 16:03:27,207 | WARNING | Duplicate invoice detected: TN-2026-014
 2026-07-14 16:03:30,461 | INFO | Invoice saved to Excel: TN-2026-014
+2026-07-14 17:53:28,989 | INFO | Invoice Bot started successfully
+2026-07-14 17:53:53,485 | INFO | Invoice Bot started successfully
+2026-07-14 17:53:53,511 | INFO | Connecting to Gmail...
+2026-07-14 17:53:54,259 | INFO | file_cache is only supported with oauth2client<4.0.0
+2026-07-14 17:53:56,046 | INFO | Found 1 invoice(s) in Gmail
+2026-07-14 17:53:56,047 | INFO | Starting processing: professional_sample_invoice_2.pdf
+2026-07-14 17:53:56,138 | INFO | Text extracted successfully from: professional_sample_invoice_2.pdf
+2026-07-14 17:53:58,189 | INFO | AI extracted data: vendor=N/A, invoice_no=N/A, total=0
+2026-07-14 17:53:58,198 | WARNING | Validation failed for professional_sample_invoice_2.pdf: Vendor name is missing
+2026-07-14 17:53:58,198 | WARNING | Validation failed for professional_sample_invoice_2.pdf: Invoice number is missing
+2026-07-14 17:53:58,200 | WARNING | Validation failed for professional_sample_invoice_2.pdf: Date is missing
+2026-07-14 17:53:58,201 | WARNING | Validation failed for professional_sample_invoice_2.pdf: Total amount is missing or zero
+2026-07-14 17:57:23,282 | INFO | Invoice Bot started successfully
+2026-07-14 17:57:23,297 | INFO | File uploaded: professional_sample_invoice.pdf
+2026-07-14 17:57:42,595 | INFO | Invoice Bot started successfully
+2026-07-14 17:57:42,609 | INFO | File uploaded: professional_sample_invoice.pdf
+2026-07-14 17:57:42,611 | INFO | Starting processing: professional_sample_invoice.pdf
+2026-07-14 17:57:42,665 | INFO | Text extracted successfully from: professional_sample_invoice.pdf
+2026-07-14 17:58:38,464 | INFO | HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2026-07-14 17:58:38,466 | INFO | AI extracted data: vendor=ABC Digital Solutions Pvt. Ltd., invoice_no=INV-2026-001, total=64900
+2026-07-14 17:58:38,474 | INFO | Invoice validated successfully: INV-2026-001
+2026-07-14 17:58:38,477 | WARNING | Duplicate invoice detected: INV-2026-001
+2026-07-14 17:58:41,731 | INFO | Invoice saved to Excel: INV-2026-001
+2026-07-14 17:59:12,146 | INFO | Invoice Bot started successfully
