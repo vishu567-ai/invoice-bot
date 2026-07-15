@@ -8,6 +8,7 @@ from rpa_entry import save_to_excel
 from email_fetcher import fetch_invoice_emails
 from logger import log_info, log_error, log_warning, get_logs
 from fraud_detector import detect_fraud
+from scheduler import start_scheduler, stop_scheduler
 import os
 import pandas as pd
 
@@ -55,6 +56,12 @@ st.markdown("""
 init_db()
 log_info("Invoice Bot started successfully")
 
+# Initialize scheduler state
+if 'scheduler_running' not in st.session_state:
+    st.session_state.scheduler_running = False
+if 'scheduler_thread' not in st.session_state:
+    st.session_state.scheduler_thread = None
+
 # Header
 st.markdown('<div class="title">🤖 AI-Powered Invoice Processing Bot</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">LLM + RPA | Local Prototype | 100% Free & Offline</div>', unsafe_allow_html=True)
@@ -69,15 +76,6 @@ def confidence_label(score):
     else:
         return f"🔴 {score}% confident"
 
-# Fraud risk helper
-def fraud_badge(risk_level, risk_score):
-    if risk_level == "HIGH":
-        return f"🔴 HIGH RISK ({risk_score}/100)"
-    elif risk_level == "MEDIUM":
-        return f"🟡 MEDIUM RISK ({risk_score}/100)"
-    else:
-        return f"🟢 LOW RISK ({risk_score}/100)"
-
 def process_single_invoice(file_path, file_type):
     try:
         log_info(f"Starting processing: {os.path.basename(file_path)}")
@@ -87,7 +85,7 @@ def process_single_invoice(file_path, file_type):
                 text = extract_text_from_pdf(file_path)
             else:
                 text = extract_text_from_image(file_path)
-        log_info(f"Text extracted successfully from: {os.path.basename(file_path)}")
+        log_info(f"Text extracted: {os.path.basename(file_path)}")
 
         with st.expander("📄 View Raw Extracted Text"):
             st.text_area("", text, height=120)
@@ -119,14 +117,14 @@ def process_single_invoice(file_path, file_type):
         with st.spinner("🔍 Analyzing for fraud..."):
             risk_level, risk_score, reasons = detect_fraud(data)
 
-        log_info(f"Fraud analysis: {risk_level} risk ({risk_score}/100) for {data.get('invoice_number')}")
+        log_info(f"Fraud: {risk_level} risk ({risk_score}/100)")
 
         if risk_level == "HIGH":
             st.error(f"🔴 HIGH FRAUD RISK — Score: {risk_score}/100")
-            log_warning(f"HIGH fraud risk detected for invoice: {data.get('invoice_number')}")
+            log_warning(f"HIGH fraud risk: {data.get('invoice_number')}")
         elif risk_level == "MEDIUM":
             st.warning(f"🟡 MEDIUM FRAUD RISK — Score: {risk_score}/100")
-            log_warning(f"MEDIUM fraud risk detected for invoice: {data.get('invoice_number')}")
+            log_warning(f"MEDIUM fraud risk: {data.get('invoice_number')}")
         else:
             st.success(f"🟢 LOW FRAUD RISK — Score: {risk_score}/100")
 
@@ -142,22 +140,19 @@ def process_single_invoice(file_path, file_type):
 
         if is_valid:
             st.success("✅ Invoice is Valid!")
-            log_info(f"Invoice validated: {data.get('invoice_number')}")
-
             if risk_level == "HIGH":
-                st.error("❌ Invoice flagged for manual review due to HIGH fraud risk!")
-                log_warning(f"Invoice {data.get('invoice_number')} blocked due to HIGH fraud risk")
+                st.error("❌ Flagged for manual review — HIGH fraud risk!")
+                log_warning(f"Blocked due to HIGH fraud risk: {data.get('invoice_number')}")
             else:
                 saved = save_invoice(data)
                 if saved:
                     st.success("💾 Saved to Database!")
-                    log_info(f"Saved to database: {data.get('invoice_number')}")
+                    log_info(f"Saved: {data.get('invoice_number')}")
                 else:
                     st.warning("⚠️ Duplicate Invoice!")
-                    log_warning(f"Duplicate invoice: {data.get('invoice_number')}")
+                    log_warning(f"Duplicate: {data.get('invoice_number')}")
                 save_to_excel(data)
                 st.success("📊 Saved to Excel!")
-                log_info(f"Saved to Excel: {data.get('invoice_number')}")
         else:
             st.error("❌ Validation Failed!")
             for msg in messages:
@@ -166,7 +161,7 @@ def process_single_invoice(file_path, file_type):
 
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
-        log_error(f"Error processing {os.path.basename(file_path)}: {str(e)}")
+        log_error(f"Error: {str(e)}")
 
 # Sidebar
 with st.sidebar:
@@ -189,6 +184,27 @@ with st.sidebar:
     st.markdown("🌐 Streamlit UI")
     st.markdown("📧 Gmail API")
     st.markdown("🔍 Fraud Detection")
+    st.markdown("⏰ Auto-Scheduler")
+    st.markdown("---")
+
+    # Scheduler Control
+    st.markdown("### ⏰ Auto-Scheduler")
+    interval = st.selectbox("Check Gmail every:", [5, 10, 15, 30, 60], index=1)
+
+    if not st.session_state.scheduler_running:
+        if st.button("▶️ Start Scheduler"):
+            st.session_state.scheduler_thread = start_scheduler(interval)
+            st.session_state.scheduler_running = True
+            st.success(f"✅ Scheduler started! Checking every {interval} mins")
+            log_info(f"Scheduler started — every {interval} minutes")
+    else:
+        st.success(f"🟢 Scheduler is running")
+        if st.button("⏹️ Stop Scheduler"):
+            stop_scheduler()
+            st.session_state.scheduler_running = False
+            st.warning("⏹️ Scheduler stopped")
+            log_info("Scheduler stopped")
+
     st.markdown("---")
     invoices = get_all_invoices()
     total_invoices = len(invoices)
@@ -216,7 +232,7 @@ with tab1:
             os.makedirs("invoices", exist_ok=True)
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            log_info(f"File uploaded: {uploaded_file.name}")
+            log_info(f"Uploaded: {uploaded_file.name}")
 
             if st.button("🚀 Process Invoice"):
                 with col2:
@@ -224,22 +240,22 @@ with tab1:
 
 with tab2:
     st.markdown("### 📧 Fetch Invoices from Gmail")
-    st.info("Searches Gmail for emails with 'invoice' in subject and downloads attachments automatically.")
+    st.info("Searches Gmail for emails with 'invoice' in subject and downloads attachments.")
 
     if st.button("📧 Fetch Invoice Emails"):
         with st.spinner("Connecting to Gmail..."):
             try:
-                log_info("Connecting to Gmail...")
+                log_info("Manual Gmail fetch...")
                 files = fetch_invoice_emails()
                 if files:
-                    st.success(f"✅ Found {len(files)} invoice attachment(s)!")
-                    log_info(f"Found {len(files)} invoice(s) in Gmail")
+                    st.success(f"✅ Found {len(files)} invoice(s)!")
+                    log_info(f"Found {len(files)} invoice(s)")
                     for file_path in files:
                         st.markdown(f"**Processing:** {os.path.basename(file_path)}")
                         process_single_invoice(file_path, "")
                 else:
-                    st.warning("No invoice emails found with attachments.")
-                    log_warning("No invoice emails found in Gmail")
+                    st.warning("No invoice emails found.")
+                    log_warning("No invoice emails found")
             except Exception as e:
                 st.error(f"Error: {str(e)}")
                 log_error(f"Gmail error: {str(e)}")
