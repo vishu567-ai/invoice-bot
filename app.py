@@ -7,6 +7,7 @@ from database import init_db, save_invoice, get_all_invoices
 from rpa_entry import save_to_excel
 from email_fetcher import fetch_invoice_emails
 from logger import log_info, log_error, log_warning, get_logs
+from fraud_detector import detect_fraud
 import os
 import pandas as pd
 
@@ -68,6 +69,15 @@ def confidence_label(score):
     else:
         return f"🔴 {score}% confident"
 
+# Fraud risk helper
+def fraud_badge(risk_level, risk_score):
+    if risk_level == "HIGH":
+        return f"🔴 HIGH RISK ({risk_score}/100)"
+    elif risk_level == "MEDIUM":
+        return f"🟡 MEDIUM RISK ({risk_score}/100)"
+    else:
+        return f"🟢 LOW RISK ({risk_score}/100)"
+
 def process_single_invoice(file_path, file_type):
     try:
         log_info(f"Starting processing: {os.path.basename(file_path)}")
@@ -84,7 +94,7 @@ def process_single_invoice(file_path, file_type):
 
         with st.spinner("🧠 AI extracting data..."):
             data = extract_invoice_data(text)
-        log_info(f"AI extracted data: vendor={data.get('vendor')}, invoice_no={data.get('invoice_number')}, total={data.get('total')}")
+        log_info(f"AI extracted: vendor={data.get('vendor')}, invoice_no={data.get('invoice_number')}, total={data.get('total')}")
 
         st.markdown("### 🧠 AI Extracted Data")
         fields = [
@@ -104,32 +114,58 @@ def process_single_invoice(file_path, file_type):
             with col_b:
                 st.markdown(f"<br>{confidence_label(confidence)}", unsafe_allow_html=True)
 
+        # Fraud Detection
+        st.markdown("### 🔍 Fraud Analysis")
+        with st.spinner("🔍 Analyzing for fraud..."):
+            risk_level, risk_score, reasons = detect_fraud(data)
+
+        log_info(f"Fraud analysis: {risk_level} risk ({risk_score}/100) for {data.get('invoice_number')}")
+
+        if risk_level == "HIGH":
+            st.error(f"🔴 HIGH FRAUD RISK — Score: {risk_score}/100")
+            log_warning(f"HIGH fraud risk detected for invoice: {data.get('invoice_number')}")
+        elif risk_level == "MEDIUM":
+            st.warning(f"🟡 MEDIUM FRAUD RISK — Score: {risk_score}/100")
+            log_warning(f"MEDIUM fraud risk detected for invoice: {data.get('invoice_number')}")
+        else:
+            st.success(f"🟢 LOW FRAUD RISK — Score: {risk_score}/100")
+
+        if reasons:
+            st.markdown("**Suspicious findings:**")
+            for reason in reasons:
+                st.markdown(f"- {reason}")
+        else:
+            st.markdown("✅ No suspicious patterns detected")
+
+        # Validate
         is_valid, messages = validate_invoice(data)
 
         if is_valid:
             st.success("✅ Invoice is Valid!")
-            log_info(f"Invoice validated successfully: {data.get('invoice_number')}")
+            log_info(f"Invoice validated: {data.get('invoice_number')}")
 
-            saved = save_invoice(data)
-            if saved:
-                st.success("💾 Saved to Database!")
-                log_info(f"Invoice saved to database: {data.get('invoice_number')}")
+            if risk_level == "HIGH":
+                st.error("❌ Invoice flagged for manual review due to HIGH fraud risk!")
+                log_warning(f"Invoice {data.get('invoice_number')} blocked due to HIGH fraud risk")
             else:
-                st.warning("⚠️ Duplicate Invoice!")
-                log_warning(f"Duplicate invoice detected: {data.get('invoice_number')}")
-
-            save_to_excel(data)
-            st.success("📊 Saved to Excel!")
-            log_info(f"Invoice saved to Excel: {data.get('invoice_number')}")
-
+                saved = save_invoice(data)
+                if saved:
+                    st.success("💾 Saved to Database!")
+                    log_info(f"Saved to database: {data.get('invoice_number')}")
+                else:
+                    st.warning("⚠️ Duplicate Invoice!")
+                    log_warning(f"Duplicate invoice: {data.get('invoice_number')}")
+                save_to_excel(data)
+                st.success("📊 Saved to Excel!")
+                log_info(f"Saved to Excel: {data.get('invoice_number')}")
         else:
             st.error("❌ Validation Failed!")
             for msg in messages:
                 st.warning(msg)
-                log_warning(f"Validation failed for {os.path.basename(file_path)}: {msg}")
+                log_warning(f"Validation failed: {msg}")
 
     except Exception as e:
-        st.error(f"❌ Error processing invoice: {str(e)}")
+        st.error(f"❌ Error: {str(e)}")
         log_error(f"Error processing {os.path.basename(file_path)}: {str(e)}")
 
 # Sidebar
@@ -140,9 +176,10 @@ with st.sidebar:
     st.markdown("1. 📤 Upload Invoice")
     st.markdown("2. 🔍 OCR reads the text")
     st.markdown("3. 🧠 AI extracts data")
-    st.markdown("4. ✅ System validates")
-    st.markdown("5. 💾 Saves to Database")
-    st.markdown("6. 📊 Updates Excel")
+    st.markdown("4. 🔍 Fraud analysis")
+    st.markdown("5. ✅ System validates")
+    st.markdown("6. 💾 Saves to Database")
+    st.markdown("7. 📊 Updates Excel")
     st.markdown("---")
     st.markdown("### 🛠️ Tech Stack")
     st.markdown("🧠 Mistral LLM (Ollama)")
@@ -151,6 +188,7 @@ with st.sidebar:
     st.markdown("📊 Excel (openpyxl)")
     st.markdown("🌐 Streamlit UI")
     st.markdown("📧 Gmail API")
+    st.markdown("🔍 Fraud Detection")
     st.markdown("---")
     invoices = get_all_invoices()
     total_invoices = len(invoices)
@@ -186,7 +224,7 @@ with tab1:
 
 with tab2:
     st.markdown("### 📧 Fetch Invoices from Gmail")
-    st.info("This will search your Gmail for emails with 'invoice' in subject and download attachments automatically.")
+    st.info("Searches Gmail for emails with 'invoice' in subject and downloads attachments automatically.")
 
     if st.button("📧 Fetch Invoice Emails"):
         with st.spinner("Connecting to Gmail..."):
@@ -203,8 +241,8 @@ with tab2:
                     st.warning("No invoice emails found with attachments.")
                     log_warning("No invoice emails found in Gmail")
             except Exception as e:
-                st.error(f"Error connecting to Gmail: {str(e)}")
-                log_error(f"Gmail connection error: {str(e)}")
+                st.error(f"Error: {str(e)}")
+                log_error(f"Gmail error: {str(e)}")
 
 with tab3:
     st.markdown("### 📋 System Logs")
@@ -218,7 +256,6 @@ with tab3:
         log_text = "".join(logs)
         st.text_area("", log_text, height=400)
 
-        # Color coded summary
         info_count = sum(1 for l in logs if "INFO" in l)
         warning_count = sum(1 for l in logs if "WARNING" in l)
         error_count = sum(1 for l in logs if "ERROR" in l)
