@@ -52,6 +52,8 @@ All running **locally on your laptop** — no internet required, no API costs, c
 - ✅ **Local LLM** — runs Mistral AI completely offline
 - ✅ **Confidence Scores** — shows how confident AI is for each field
 - ✅ **Gmail Auto-Fetch** — automatically pulls invoice attachments from email
+- ✅ **Auto-Scheduler** — automatically checks Gmail every X minutes
+- ✅ **AI Fraud Detection** — detects suspicious invoices automatically
 - ✅ **Duplicate Detection** — prevents same invoice from being saved twice
 - ✅ **Real RPA** — automatically opens and fills Excel
 - ✅ **System Logging** — logs every action with timestamps
@@ -116,9 +118,7 @@ python -m streamlit run app.py
 
 ## 🔮 Future Work
 
-- 📧 Scheduled email monitoring (auto-check every X minutes)
 - 🌍 Multi-language invoice support
-- 🔍 AI-based fraud detection
 - 🏢 ERP system integration (Tally, QuickBooks)
 - ☁️ Cloud deployment for team access
 - 📱 Mobile-friendly dashboard
